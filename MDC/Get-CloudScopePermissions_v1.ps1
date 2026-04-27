@@ -254,4 +254,4 @@ foreach ($zone in $zones) {
 Write-Host ""
 Write-Host "Done" -ForegroundColor Green
 
-Disconnect-MgGraph
+Disconnect-MgGraph | Out-Null
