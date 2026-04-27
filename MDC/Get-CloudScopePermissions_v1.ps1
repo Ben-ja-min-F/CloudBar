@@ -17,7 +17,7 @@ $ctx = Get-MgContext
 Write-Host "Connected as $($ctx.Account)" -ForegroundColor Green
 Write-Host ""
 
-# In case you have more than 100 zones
+# In case you have more than 100 zones. Why? And can I get a screenshot?
 function Get-AllPages {
     param(
         [Parameter(Mandatory = $true)]
@@ -114,8 +114,8 @@ foreach ($assignment in $assignments) {
 }
 
 # match assignments to zones
-#   "/CloudSet/<zoneId>"  - scoped to that specific zone
-#   "Mdc"                 - applies to all cloud scopes
+#   "/CloudSet/<zoneId>"  - specific zone
+#   "Mdc"                 - all cloud scopes
 #   "/"                   - tenant-wide
 function Get-CoverageType {
     param($Assignment)
