@@ -1,3 +1,4 @@
+# In case I need it in the future
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -17,7 +18,7 @@ $ctx = Get-MgContext
 Write-Host "Connected as $($ctx.Account)" -ForegroundColor Green
 Write-Host ""
 
-# In case you have more than 100 zones. Why? And can I get a screenshot?
+# In case you have more than 100 zones
 function Get-AllPages {
     param(
         [Parameter(Mandatory = $true)]
@@ -82,7 +83,6 @@ foreach ($assignment in $assignments) {
         if ($principalLookup.ContainsKey($principalId)) {
             continue
         }
-
         try {
             $url = "https://graph.microsoft.com/v1.0/directoryObjects/$principalId"
             $obj = Invoke-MgGraphRequest -Method GET -Uri $url
@@ -103,7 +103,8 @@ foreach ($assignment in $assignments) {
                 DisplayName = $name
                 Type = $type
             }
-        } catch {
+        } 
+        catch {
             $principalLookup[$principalId] = [pscustomobject]@{
                 Id = $principalId
                 DisplayName = "(could not resolve)"
@@ -113,63 +114,28 @@ foreach ($assignment in $assignments) {
     }
 }
 
-# match assignments to zones
-#   "/CloudSet/<zoneId>"  - specific zone
-#   "Mdc"                 - all cloud scopes
-#   "/"                   - tenant-wide
-function Get-CoverageType {
-    param($Assignment)
-
-    $scopeIds = $Assignment.appScopeIds
-
-    # Check for any /CloudSet/ entry
-    foreach ($scope in $scopeIds) {
-        if ($scope -like "/CloudSet/*") {
-            return "Specific"
-        }
-    }
-
-    # Workload-wide on Mdc
-    foreach ($scope in $scopeIds) {
-        if ($scope -eq "Mdc") {
-            return "AllCloudScopes"
-        }
-    }
-
-    # Tenant-wide
-    foreach ($scope in $scopeIds) {
-        if ($scope -eq "/") {
-            return "TenantWide"
-        }
-    }
-
-    return "NoCoverage"
-}
-
 # Build the report
 $report = @()
 
 foreach ($zone in $zones) {
     foreach ($assignment in $assignments) {
 
-        $coverage = Get-CoverageType -Assignment $assignment
-        $applies = $false
+        $cloudSetIds = $assignment.appScopeIds | Where-Object { $_ -like '/CloudSet/*' }
+        $sentinelIds = $assignment.appScopeIds | Where-Object { $_ -like '/SentinelScope/*' }
 
-        switch ($coverage) {
-            "Specific" {
-                # Check if this specific zone is in the scope list
-                $expected = "/CloudSet/$($zone.id)"
-                foreach ($scope in $assignment.appScopeIds) {
-                    if ($scope -eq $expected) {
-                        $applies = $true
-                        break
-                    }
-                }
-            }
-            "AllCloudScopes" { $applies = $true }
-            "TenantWide"     { $applies = $true }
+        # Filtering out Sentinel scopes, since we focus on cloud scopes
+        # Currently it is not possible to have a sentinel-only assignment. At least through the UI, you always have to select a cloud scope or vice versa if you want a Cloud-only scope assignment.
+        if ($cloudSetIds) {
+            $applies = $cloudSetIds -contains "/CloudSet/$($zone.id)"
+        } 
+        elseif ($sentinelIds) {
+
+            $applies = $false
+        } 
+        else {
+
+            $applies = $true
         }
-
         if (-not $applies) {
             continue
         }
@@ -193,12 +159,10 @@ foreach ($zone in $zones) {
         $report += [pscustomobject]@{
             ZoneId = $zone.id
             ZoneName = $zone.displayName
-            CoverageType = $coverage
             AssignmentName = $assignment.displayName
             AssignmentId = $assignment.id
             RoleName = $roleDef.displayName
             RoleId = $assignment.roleDefinitionId
-            AppScopeIds = $assignment.appScopeIds
             Principals = $principals
             Permissions = $permissions
         }
@@ -213,7 +177,7 @@ Write-Host "=====================================" -ForegroundColor Yellow
 foreach ($zone in $zones) {
 
     Write-Host ""
-    Write-Host "Zone: $($zone.displayName)" -ForegroundColor Green
+    Write-Host "Scope: $($zone.displayName)" -ForegroundColor Green
     Write-Host "  Id: $($zone.id)"
 
     $rowsForZone = $report | Where-Object { $_.ZoneId -eq $zone.id }
@@ -232,18 +196,17 @@ foreach ($zone in $zones) {
         Write-Host ""
         Write-Host "    - Assignment:  $($row.AssignmentName)" -ForegroundColor White
         Write-Host "      Role:        $($row.RoleName)"
-        Write-Host "      Coverage:    $($row.CoverageType)"
-        Write-Host "      AppScopeIds: $($row.AppScopeIds -join ', ')"
 
         Write-Host "      Principals:"
         foreach ($p in $row.Principals) {
-            Write-Host "        * $($p.DisplayName) [$($p.Type)]"
+            Write-Host "        * $($p.DisplayName) [$($p.Type)] - $($p.Id)"
         }
 
         Write-Host "      Permissions:"
         if ($row.Permissions.Count -eq 0) {
             Write-Host "        (none)"
-        } else {
+        } 
+        else {
             foreach ($perm in $row.Permissions) {
                 Write-Host "        * $perm"
             }
