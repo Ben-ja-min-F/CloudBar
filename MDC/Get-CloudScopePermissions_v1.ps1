@@ -124,7 +124,7 @@ foreach ($zone in $zones) {
         $sentinelIds = $assignment.appScopeIds | Where-Object { $_ -like '/SentinelScope/*' }
 
         # Filtering out Sentinel scopes, since we focus on cloud scopes
-        # Currently it is not possible to have a sentinel-only assignment. At least through the UI, you always have to select a cloud scope or vice versa if you want a Cloud-only scope assignment.
+        # Under certain conditions Sentinel scopes will show up
         if ($cloudSetIds) {
             $applies = $cloudSetIds -contains "/CloudSet/$($zone.id)"
         } 
