@@ -39,10 +39,43 @@ function Get-AllPages {
     return $results
 }
 
+# Collect report line
+$exportLines = @()
+
+function Write-ReportLine {
+    param(
+        [string]$Text = "",
+        $ForegroundColor = $null
+    )
+
+    if ($ForegroundColor) {
+        Write-Host $Text -ForegroundColor $ForegroundColor
+    }
+    else {
+        Write-Host $Text
+    }
+
+    $script:exportLines += $Text
+}
+
 # Get zones
 Write-Host "Getting zones..." -ForegroundColor Cyan
 $zones = Get-AllPages -Url "https://graph.microsoft.com/beta/security/zones"
 Write-Host "Found $($zones.Count) zones"
+
+# Get environments (Azure subs / AWS accounts / GCP projects / etc.) for each zone
+Write-Host "Getting environments..." -ForegroundColor Cyan
+$environmentsByZone = @{}
+foreach ($zone in $zones) {
+    try {
+        $url = "https://graph.microsoft.com/beta/security/zones/$($zone.id)/environments"
+        $environmentsByZone[$zone.id] = Get-AllPages -Url $url
+    }
+    catch {
+        Write-Warning "Could not fetch environments for zone $($zone.displayName) ($($zone.id))"
+        $environmentsByZone[$zone.id] = @()
+    }
+}
 
 # Get all Defender role assignments
 
@@ -103,7 +136,7 @@ foreach ($assignment in $assignments) {
                 DisplayName = $name
                 Type = $type
             }
-        } 
+        }
         catch {
             $principalLookup[$principalId] = [pscustomobject]@{
                 Id = $principalId
@@ -124,14 +157,13 @@ foreach ($zone in $zones) {
         $sentinelIds = $assignment.appScopeIds | Where-Object { $_ -like '/SentinelScope/*' }
 
         # Filtering out Sentinel scopes, since we focus on cloud scopes
-        # Under certain conditions Sentinel scopes will show up
         if ($cloudSetIds) {
             $applies = $cloudSetIds -contains "/CloudSet/$($zone.id)"
-        } 
+        }
         elseif ($sentinelIds) {
 
             $applies = $false
-        } 
+        }
         else {
 
             $applies = $true
@@ -169,49 +201,81 @@ foreach ($zone in $zones) {
     }
 }
 
-Write-Host ""
-Write-Host "=====================================" -ForegroundColor Yellow
-Write-Host "          REPORT" -ForegroundColor Yellow
-Write-Host "=====================================" -ForegroundColor Yellow
+Write-ReportLine ""
+Write-ReportLine "=====================================" -ForegroundColor Yellow
+Write-ReportLine "          REPORT" -ForegroundColor Yellow
+Write-ReportLine "=====================================" -ForegroundColor Yellow
 
 foreach ($zone in $zones) {
 
-    Write-Host ""
-    Write-Host "Scope: $($zone.displayName)" -ForegroundColor Green
-    Write-Host "  Id: $($zone.id)"
+    Write-ReportLine ""
+    Write-ReportLine "Scope: $($zone.displayName)" -ForegroundColor Green
+    Write-ReportLine "  Id: $($zone.id)"
+
+    $environments = $environmentsByZone[$zone.id]
+    if ($environments -and $environments.Count -gt 0) {
+        Write-ReportLine "  Environments:"
+        foreach ($env in $environments) {
+            Write-ReportLine "    * [$($env.kind)] $($env.id)"
+        }
+    }
 
     $rowsForZone = $report | Where-Object { $_.ZoneId -eq $zone.id }
 
     if (-not $rowsForZone) {
-        Write-Host "  (no assignments)" -ForegroundColor DarkGray
+        Write-ReportLine "  (no assignments)" -ForegroundColor DarkGray
         continue
     }
 
 
     $rowsForZone = @($rowsForZone)
 
-    Write-Host "  Assignments: $($rowsForZone.Count)"
+    Write-ReportLine "  Assignments: $($rowsForZone.Count)"
 
     foreach ($row in $rowsForZone) {
-        Write-Host ""
-        Write-Host "    - Assignment:  $($row.AssignmentName)" -ForegroundColor White
-        Write-Host "      Role:        $($row.RoleName)"
+        Write-ReportLine ""
+        Write-ReportLine "    - Assignment:  $($row.AssignmentName)" -ForegroundColor White
+        Write-ReportLine "      Role:        $($row.RoleName)"
 
-        Write-Host "      Principals:"
+        Write-ReportLine "      Principals:"
         foreach ($p in $row.Principals) {
-            Write-Host "        * $($p.DisplayName) [$($p.Type)] - $($p.Id)"
+            Write-ReportLine "        * $($p.DisplayName) [$($p.Type)] - $($p.Id)"
         }
 
-        Write-Host "      Permissions:"
+        Write-ReportLine "      Permissions:"
         if ($row.Permissions.Count -eq 0) {
-            Write-Host "        (none)"
-        } 
+            Write-ReportLine "        (none)"
+        }
         else {
             foreach ($perm in $row.Permissions) {
-                Write-Host "        * $perm"
+                Write-ReportLine "        * $perm"
             }
         }
     }
+}
+
+# Export the stuff
+Write-Host ""
+$export = Read-Host "Do you want to export the report? (Y/N)"
+
+if ($export -eq "Y") {
+
+    # Default path is next to the script
+    $defaultPath = Join-Path $PSScriptRoot "CloudScopePermissions_$(Get-Date -Format 'yyyy-MM-dd').txt"
+    Write-Host "Default path: $defaultPath"
+
+    $path = Read-Host "Do you want to change the default path? (Y/N)"
+
+    if ($path -eq "Y") {
+        $OutputPath = Read-Host "Enter the new path"
+    }
+    else {
+        $OutputPath = $defaultPath
+    }
+
+    $exportLines | Out-File -FilePath $OutputPath -Encoding utf8
+    Write-Host ""
+    Write-Host "Report saved to: $OutputPath" -ForegroundColor Green
 }
 
 Write-Host ""
