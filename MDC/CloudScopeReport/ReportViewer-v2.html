@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Scope Report</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --line: #e1e0d9;
+    --border: rgba(11, 11, 11, 0.10);
+    --danger: #d03b3b;
+    --acc-scope: #2a78d6;
+    --acc-mg: #4a3aa7;
+    --acc-sub: #eb6834;
+    --acc-rg: #1baf7a;
+    --acc-ext: #eda100;
+    --acc-none: #c3c2b7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --line: #2c2c2a;
+      --border: rgba(255, 255, 255, 0.10);
+      --acc-scope: #3987e5;
+      --acc-mg: #9085e9;
+      --acc-sub: #d95926;
+      --acc-rg: #199e70;
+      --acc-ext: #c98500;
+      --acc-none: #383835;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--page);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  #meta { color: var(--muted); font-size: 12.5px; }
+  #loadBtn {
+    margin-left: auto;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  #loadBtn:hover { border-color: var(--muted); }
+
+  main { display: flex; align-items: stretch; }
+  aside { width: 290px; flex: none; border-right: 1px solid var(--line); padding: 12px; min-height: calc(100vh - 55px); }
+  aside h2, section h2 {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 8px 4px 8px;
+    font-weight: 600;
+  }
+  .scope-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 9px 12px;
+    cursor: pointer;
+    margin-bottom: 4px;
+  }
+  .scope-item:hover { background: var(--surface); }
+  .scope-item.active { background: var(--surface); border-color: var(--border); }
+  .scope-item .name { font-weight: 600; }
+  .scope-item .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  #detail { flex: 1; min-width: 0; padding: 18px 24px 40px; }
+  #detail > .desc { color: var(--ink-2); margin: 2px 0 0; }
+  #detail > .scope-id { color: var(--muted); font-size: 12px; margin: 2px 0 14px; }
+  #scopeTitle { font-size: 20px; margin: 0; font-weight: 650; }
+
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; color: var(--ink-2); }
+  .stat b { color: var(--ink); font-size: 14px; margin-right: 5px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .panel-head { display: flex; align-items: center; gap: 10px; }
+  .panel-head h2 { margin: 0; flex: 1; }
+  .panel-head button {
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink-2);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .panel-head button:hover { border-color: var(--muted); }
+
+  #treewrap { overflow-x: auto; padding: 12px 4px 6px; }
+  .branch { display: flex; align-items: center; }
+  .kids { display: flex; flex-direction: column; }
+  .kids > .branch { position: relative; padding: 5px 0 5px 34px; }
+  .kids > .branch::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 50%;
+    width: 34px;
+    border-top: 2px solid var(--line);
+  }
+  .kids > .branch::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    border-left: 2px solid var(--line);
+  }
+  .kids > .branch:first-child::after { top: 50%; }
+  .kids > .branch:last-child::after { bottom: 50%; }
+  .kids > .branch:only-child::after { display: none; }
+  .branch.collapsed > .kids { display: none; }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--acc-none);
+    border-radius: 8px;
+    padding: 6px 12px 7px;
+    max-width: 330px;
+    flex: none;
+  }
+  .has-kids > .card { cursor: pointer; }
+  .has-kids > .card:hover { border-color: var(--muted); border-left-width: 4px; }
+  .card .top { display: flex; align-items: center; gap: 7px; }
+  .card .badge { font-size: 9.5px; letter-spacing: 0.07em; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+  .card .count {
+    font-size: 11px;
+    color: var(--ink-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 7px;
+  }
+  .card .chev { color: var(--muted); font-size: 10px; width: 10px; }
+  .has-kids > .card .chev::before { content: '▾'; }
+  .collapsed > .card .chev::before { content: '▸'; }
+  .card .title { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .sub { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+  .card.t-scope { border-left-color: var(--acc-scope); }
+  .card.t-mg { border-left-color: var(--acc-mg); }
+  .card.t-sub { border-left-color: var(--acc-sub); }
+  .card.t-rg { border-left-color: var(--acc-rg); }
+  .card.t-ext { border-left-color: var(--acc-ext); }
+  .card.err { border-left-color: var(--danger); }
+  .card.err .sub { color: var(--danger); }
+  .card.more { cursor: pointer; color: var(--ink-2); font-size: 12.5px; }
+  .card.more:hover { border-color: var(--muted); }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 9px;
+    vertical-align: middle;
+  }
+  .plist { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .assign {
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .assign .head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .assign .role { font-weight: 650; font-size: 14px; }
+  .assign .aname { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .assign h3 {
+    font-size: 10.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 12px 0 5px;
+    font-weight: 600;
+  }
+  .principal { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 2px 0; font-size: 12.5px; }
+  .idtext { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .copybtn {
+    font: inherit;
+    font-size: 10.5px;
+    color: var(--ink-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 7px;
+    cursor: pointer;
+    flex: none;
+  }
+  .copybtn:hover { border-color: var(--muted); }
+  .idrow { display: flex; align-items: center; gap: 6px; margin-top: 3px; cursor: auto; }
+  .perm {
+    padding: 2px 0 2px 14px;
+    position: relative;
+    font-size: 12.5px;
+    font-family: ui-monospace, Consolas, monospace;
+    color: var(--ink-2);
+    word-break: break-all;
+  }
+  .perm::before {
+    content: '';
+    position: absolute;
+    left: 2px; top: 0.75em;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .none { color: var(--muted); }
+
+  #empty { margin: 12vh auto; max-width: 420px; text-align: center; color: var(--ink-2); }
+  #empty .big { font-size: 17px; font-weight: 650; color: var(--ink); margin-bottom: 8px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cloud Scope Report</h1>
+  <span id="meta"></span>
+  <button id="loadBtn" type="button">Load JSON…</button>
+  <input id="fileInput" type="file" accept=".json,application/json" class="hidden">
+</header>
+
+<div id="empty" class="hidden">
+  <div class="big">No report data loaded</div>
+  <p>This page renders the JSON exported by <code>Create-CloudScopeReport.ps1</code>.
+     Click <b>Load JSON…</b> above and pick a <code>CloudScopeReport_*.json</code> file.</p>
+</div>
+
+<main id="app" class="hidden">
+  <aside>
+    <h2>Cloud scopes</h2>
+    <div id="scopeList"></div>
+  </aside>
+  <section id="detail"></section>
+</main>
+
+<script>
+"use strict";
+
+const MAX_LEAVES = 40;
+
+let data = null;
+let selectedScopeId = null;
+
+function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+}
+
+function chip(label) {
+    return el("span", "chip", label);
+}
+
+function copyBtn(text) {
+    const b = el("button", "copybtn", "Copy");
+    b.type = "button";
+    b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        doCopy(text, b);
+    });
+    return b;
+}
+
+function doCopy(text, btn) {
+    var t = null;
+    const done = function () {
+        btn.textContent = "Copied";
+        if (t) clearTimeout(t);
+        t = setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text, done); });
+        return;
+    }
+    legacyCopy(text, done);
+}
+
+function legacyCopy(text, done) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { }
+    ta.remove();
+    done();
+}
+
+document.getElementById("loadBtn").addEventListener("click", function () {
+    document.getElementById("fileInput").click();
+});
+
+document.getElementById("fileInput").addEventListener("change", function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+        try {
+            data = JSON.parse(reader.result);
+            selectedScopeId = null;
+            render();
+        } catch (err) {
+            alert("Could not parse that file as JSON: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+});
+
+render();
+
+function render() {
+    const empty = document.getElementById("empty");
+    const app = document.getElementById("app");
+
+    if (!data || !Array.isArray(data.scopes)) {
+        empty.classList.remove("hidden");
+        app.classList.add("hidden");
+        return;
+    }
+    empty.classList.add("hidden");
+    app.classList.remove("hidden");
+
+    const bits = [];
+    if (data.tenantId) bits.push("Tenant " + data.tenantId);
+    if (data.generatedAt) bits.push("generated " + new Date(data.generatedAt).toLocaleString());
+    if (data.account) bits.push("by " + data.account);
+    document.getElementById("meta").textContent = bits.join(" · ");
+
+    renderScopeList();
+
+    if (!selectedScopeId && data.scopes.length > 0) selectedScopeId = data.scopes[0].id;
+    renderScope(data.scopes.find(s => s.id === selectedScopeId));
+}
+
+function renderScopeList() {
+    const list = document.getElementById("scopeList");
+    list.textContent = "";
+
+    for (const scope of data.scopes) {
+        const item = el("button", "scope-item" + (scope.id === selectedScopeId ? " active" : ""));
+        item.type = "button";
+        item.appendChild(el("div", "name", scope.name || "(unnamed scope)"));
+
+        const envs = (scope.environments || []).length;
+        const asg = (scope.assignments || []).length;
+        item.appendChild(el("div", "sub", envs + " environment" + (envs === 1 ? "" : "s") + " · " + asg + " assignment" + (asg === 1 ? "" : "s")));
+
+        item.addEventListener("click", function () {
+            selectedScopeId = scope.id;
+            render();
+        });
+        list.appendChild(item);
+    }
+}
+
+function scopeStats(scope) {
+    let mgs = 0, rgs = 0, res = 0;
+    const seen = new Set();
+
+    function walkSub(sub) {
+        if (!sub) return;
+        const key = (sub.id || "").toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        rgs += (sub.resourceGroups || []).length;
+        res += sub.resourceCount || 0;
+    }
+    function walkMg(mg) {
+        if (!mg) return;
+        mgs++;
+        for (const c of mg.children || []) walkMg(c);
+        for (const s of mg.subscriptions || []) walkSub(s);
+    }
+
+    for (const env of scope.environments || []) {
+        if (env.type === "managementGroup") walkMg(env.managementGroup);
+        else if (env.type === "subscription") walkSub(env.subscription);
+    }
+    return { envs: (scope.environments || []).length, mgs: mgs, subs: seen.size, rgs: rgs, res: res };
+}
+
+function renderScope(scope) {
+    const detail = document.getElementById("detail");
+    detail.textContent = "";
+    if (!scope) {
+        detail.appendChild(el("p", "none", "(no scope selected)"));
+        return;
+    }
+
+    const h = el("h1");
+    h.id = "scopeTitle";
+    h.textContent = scope.name || "(unnamed scope)";
+    detail.appendChild(h);
+    if (scope.description) detail.appendChild(el("p", "desc", scope.description));
+    detail.appendChild(el("p", "scope-id", "Id: " + scope.id));
+
+    const s = scopeStats(scope);
+    const stats = el("div", "stats");
+    const tiles = [
+        [s.envs, "Environments"],
+        [s.mgs, "Management groups"],
+        [s.subs, "Subscriptions"],
+        [s.rgs, "Resource groups"],
+        [s.res, "Resources"],
+        [(scope.assignments || []).length, "Assignments"]
+    ];
+    for (const t of tiles) {
+        const tile = el("span", "stat");
+        tile.appendChild(el("b", null, String(t[0])));
+        tile.appendChild(document.createTextNode(t[1]));
+        stats.appendChild(tile);
+    }
+    detail.appendChild(stats);
+
+    const contents = el("div", "panel");
+    const chead = el("div", "panel-head");
+    chead.appendChild(el("h2", null, "Contents"));
+    const expandBtn = el("button", null, "Expand all");
+    const collapseBtn = el("button", null, "Collapse all");
+    expandBtn.type = "button";
+    collapseBtn.type = "button";
+    chead.appendChild(expandBtn);
+    chead.appendChild(collapseBtn);
+    contents.appendChild(chead);
+
+    const wrap = el("div");
+    wrap.id = "treewrap";
+    wrap.appendChild(scopeTree(scope));
+    contents.appendChild(wrap);
+    detail.appendChild(contents);
+
+    expandBtn.addEventListener("click", function () {
+        wrap.querySelectorAll(".branch.has-kids").forEach(b => b.classList.remove("collapsed"));
+    });
+    collapseBtn.addEventListener("click", function () {
+        // ".kids ." keeps the root open
+        wrap.querySelectorAll(".kids .branch.has-kids").forEach(b => b.classList.add("collapsed"));
+    });
+
+    const perms = el("div", "panel");
+    const phead = el("div", "panel-head");
+    phead.appendChild(el("h2", null, "Permissions"));
+    perms.appendChild(phead);
+    renderAssignments(scope, perms);
+    detail.appendChild(perms);
+}
+
+function makeCard(opts) {
+  const branch = el("div", "branch");
+  const card = el("div", "card " + (opts.cls || ""));
+  card.title = opts.tooltip || opts.title || "";
+
+  const top = el("div", "top");
+  top.appendChild(el("span", "chev"));
+  if (opts.badge) top.appendChild(el("span", "badge", opts.badge));
+  if (opts.count !== undefined) top.appendChild(el("span", "count", String(opts.count)));
+  card.appendChild(top);
+
+  card.appendChild(el("div", "title", opts.title || ""));
+  if (opts.sub) card.appendChild(el("div", "sub", opts.sub));
+
+  if (opts.copyId) {
+    const row = el("div", "idrow");
+    row.appendChild(el("code", "idtext", opts.copyId));
+    row.appendChild(copyBtn(opts.copyId));
+    row.addEventListener("click", e => e.stopPropagation());
+    card.appendChild(row);
+  }
+
+  branch.appendChild(card);
+
+  const kidList = (opts.children || []).filter(Boolean);
+  if (kidList.length) {
+    branch.classList.add("has-kids");
+    const kids = el("div", "kids");
+    for (const k of kidList) kids.appendChild(k);
+    branch.appendChild(kids);
+    if (opts.collapsed) branch.classList.add("collapsed");
+    card.addEventListener("click", () => branch.classList.toggle("collapsed"));
+  }
+  return branch;
+}
+
+function scopeTree(scope) {
+  const envs = scope.environments || [];
+  let children;
+  if (envs.length) {
+    children = [];
+    for (const e of envs) children.push(envNode(e));
+  } else {
+    children = [makeCard({ badge: "info", title: "(no environments attached)" })];
+  }
+  return makeCard({ cls: "t-scope", badge: "scope", title: scope.name || "(unnamed scope)", count: envs.length, children: children });
+}
+
+function envNode(env) {
+  if (env.type === "managementGroup" && env.managementGroup) return mgNode(env.managementGroup);
+  if (env.type === "subscription" && env.subscription) return subNode(env.subscription);
+  return makeCard({
+    cls: "t-ext",
+    badge: env.kind || "environment",
+    title: env.name || env.rawId,
+    sub: "not an Azure scope – contents not enumerated",
+    tooltip: env.rawId
+  });
+}
+
+function mgNode(mg) {
+  const children = [];
+  for (const c of mg.children || []) children.push(mgNode(c));
+  for (const s of mg.subscriptions || []) children.push(subNode(s));
+  if (mg.error) children.push(errNode(mg.error));
+
+  return makeCard({
+    cls: "t-mg",
+    badge: "mgmt group",
+    title: mg.name || mg.id,
+    count: (mg.children || []).length + (mg.subscriptions || []).length,
+    copyId: mg.id,
+    children: children
+  });
+}
+
+function subNode(sub) {
+  const children = (sub.resourceGroups || []).map(rgNode);
+  if (sub.error) children.push(errNode(sub.error));
+  const line = [sub.state, (sub.resourceCount || 0) + " resources"].filter(Boolean).join(" · ");
+
+  return makeCard({
+    cls: "t-sub",
+    badge: "subscription",
+    title: sub.name || sub.id,
+    sub: line,
+    count: (sub.resourceGroups || []).length,
+    copyId: sub.id,
+    children: children
+  });
+}
+
+function rgNode(rg) {
+  return makeCard({
+    cls: "t-rg",
+    badge: "resource group",
+    title: rg.name,
+    sub: [rg.location, (rg.resourceCount || 0) + " resources"].filter(Boolean).join(" · "),
+    count: rg.resourceCount || 0,
+    children: (rg.categories || []).map(catNode)
+  });
+}
+
+function catNode(cat) {
+  const all = cat.resources || [];
+  const children = all.slice(0, MAX_LEAVES).map(resNode);
+
+  if (all.length > MAX_LEAVES) {
+    const rest = all.slice(MAX_LEAVES);
+    const moreBranch = el("div", "branch");
+    const moreCard = el("div", "card more", "+ " + rest.length + " more…");
+    moreCard.addEventListener("click", function () {
+      const kids = moreBranch.parentElement;
+      for (const r of rest) kids.insertBefore(resNode(r), moreBranch);
+      moreBranch.remove();
+    });
+    moreBranch.appendChild(moreCard);
+    children.push(moreBranch);
+  }
+  return makeCard({ badge: "workload", title: cat.category, count: cat.count, children: children, collapsed: true });
+}
+
+function resNode(r) {
+  return makeCard({ title: r.name, sub: r.type, tooltip: r.name + " (" + r.type + ", " + r.location + ")" });
+}
+
+function errNode(msg) {
+  return makeCard({ cls: "err", badge: "no access", title: "(could not enumerate)", sub: msg });
+}
+
+function renderAssignments(scope, container) {
+  const assignments = scope.assignments || [];
+  if (!assignments.length) {
+    container.appendChild(el("p", "none", "(no assignments)"));
+    return;
+  }
+
+  for (const a of assignments) {
+    const card = el("div", "assign");
+    const head = el("div", "head");
+    head.appendChild(el("span", "role", a.role || "(unknown role)"));
+    if (a.appliesVia) head.appendChild(chip(a.appliesVia));
+    card.appendChild(head);
+    card.appendChild(el("div", "aname", a.name || ""));
+
+    card.appendChild(el("h3", null, "Principals"));
+    // card.appendChild(el("div", "plist"));
+    for (const p of a.principals) {
+      const row = el("div", "principal");
+      row.appendChild(el("span", null, p.displayName + " [" + p.type + "]"));
+      row.appendChild(el("code", "idtext", p.id));
+      row.appendChild(copyBtn(p.id));
+      card.appendChild(row);
+    }
+    if (!a.principals.length) card.appendChild(el("div", "none", "(none)"));
+
+    card.appendChild(el("h3", null, "Permissions"));
+    const perms = a.permissions || [];
+    if (!perms.length) {
+      card.appendChild(el("p", "none", "(none)"));
+    } else {
+      for (const p of perms) card.appendChild(el("div", "perm", p));
+    }
+    container.appendChild(card);
+  }
+}
+</script>
+</body>
+</html>
