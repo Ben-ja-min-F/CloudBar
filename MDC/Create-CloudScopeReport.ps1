@@ -1,6 +1,3 @@
-# Exports a JSON report of cloud scopes, their contents and permissions.
-# View the JSON with ReportViewer.html.
-
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
